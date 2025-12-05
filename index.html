@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Premium Weather App</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<style>
+  *{margin:0;padding:0;box-sizing:border-box;font-family:"Poppins",system-ui,sans-serif;}
+  body{
+    height:100vh;
+    overflow:hidden;
+    color:#fff;
+    background:linear-gradient(-45deg,#0f172a,#1d4ed8,#06b6d4,#0f172a);
+    background-size:400% 400%;
+    animation:bgMove 18s ease infinite;
+  }
+  @keyframes bgMove{
+    0%{background-position:0% 50%;}
+    50%{background-position:100% 50%;}
+    100%{background-position:0% 50%;}
+  }
+
+  .layer{
+    position:fixed;inset:0;pointer-events:none;opacity:0;transition:opacity .6s ease;z-index:-1;
+  }
+
+  #cloudLayer{overflow:hidden;}
+  .cloud{
+    position:absolute;width:220px;height:70px;background:rgba(255,255,255,0.85);
+    border-radius:50px;filter:blur(2px);
+    box-shadow:40px 10px 0 0 rgba(255,255,255,0.8),
+               90px 5px 0 0 rgba(255,255,255,0.8),
+               140px 15px 0 0 rgba(255,255,255,0.8);
+    animation:cloudDrift 60s linear infinite;
+  }
+  .cloud.small{transform:scale(.7);opacity:.7;animation-duration:80s;}
+  @keyframes cloudDrift{from{transform:translateX(-260px);}to{transform:translateX(110vw);}}
+
+  #rainLayer{
+    background-image:repeating-linear-gradient(to bottom,
+      rgba(255,255,255,0.7) 0,rgba(255,255,255,0.7) 2px,
+      transparent 2px,transparent 10px);
+    background-size:2px 10px;
+    animation:rainMove .35s linear infinite;
+  }
+  @keyframes rainMove{from{background-position:0 0;}to{background-position:0 20px;}}
+
+  #fogLayer{
+    background:radial-gradient(circle at 10% 20%,rgba(148,163,184,0.30),transparent 60%),
+               radial-gradient(circle at 80% 70%,rgba(148,163,184,0.25),transparent 55%);
+    filter:blur(6px);animation:fogMove 30s ease-in-out infinite;
+  }
+  @keyframes fogMove{
+    0%{transform:translateX(-20px);}
+    50%{transform:translateX(20px);}
+    100%{transform:translateX(-20px);}
+  }
+
+  #sunGlow{
+    background:radial-gradient(circle at 15% 15%,rgba(253,224,71,0.9),transparent 60%);
+    filter:blur(10px);animation:sunPulse 5s ease-in-out infinite;
+  }
+  @keyframes sunPulse{0%{opacity:.7;}50%{opacity:1;}100%{opacity:.7;}}
+
+  #lightningLayer{background:rgba(255,255,255,0.9);opacity:0;}
+
+  .app{position:relative;z-index:5;width:100%;max-width:600px;margin:0 auto;padding:16px 16px 28px;}
+  h1{text-align:center;font-size:26px;text-shadow:0 0 15px rgba(0,0,0,0.7);margin-top:4px;}
+
+  .search-row{display:flex;gap:8px;margin:18px 0 8px;}
+  .search-row input{
+    flex:1;padding:10px 14px;border-radius:999px;border:1px solid rgba(148,163,184,0.6);
+    background:rgba(15,23,42,0.7);color:#e5e7eb;font-size:14px;outline:none;
+  }
+  .btn{padding:10px 14px;border-radius:999px;border:none;font-size:13px;font-weight:600;cursor:pointer;white-space:nowrap;}
+  .btn-primary{background:#2563eb;color:#fff;}
+  .btn-secondary{
+    background:rgba(15,23,42,0.7);color:#e5e7eb;border:1px solid rgba(148,163,184,0.6);
+    width:100%;margin-bottom:10px;
+  }
+
+  .card{
+    background:rgba(15,23,42,0.78);border-radius:20px;padding:16px 14px 18px;
+    border:1px solid rgba(148,163,184,0.4);box-shadow:0 18px 40px rgba(0,0,0,0.55);margin-bottom:12px;
+  }
+
+  .temp{font-size:42px;font-weight:800;}
+  .desc{font-size:16px;text-transform:capitalize;opacity:.95;margin-bottom:4px;}
+  .meta-grid{margin-top:10px;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px;font-size:13px;}
+
+  .small{font-size:11px;color:#cbd5e1;opacity:.8;}
+</style>
+</head>
+
+<body>
+
+<div id="cloudLayer" class="layer">
+  <div class="cloud" style="top:10%; left:-250px;"></div>
+  <div class="cloud small" style="top:30%; left:-220px;"></div>
+  <div class="cloud" style="top:55%; left:-260px;"></div>
+</div>
+<div id="rainLayer" class="layer"></div>
+<div id="fogLayer" class="layer"></div>
+<div id="sunGlow" class="layer"></div>
+<div id="lightningLayer" class="layer"></div>
+
+<div class="app">
+  <h1>Premium Weather App</h1>
+
+  <div class="search-row">
+    <input id="cityInput" placeholder="Enter city (e.g., Nagpur)">
+    <button class="btn btn-primary" id="searchBtn">Search</button>
+  </div>
+  <button class="btn btn-secondary" id="locBtn">Use My Location</button>
+
+  <div class="card" id="weatherCard">
+    <div id="weatherOutput">Search a city or use your location to see weather.</div>
+  </div>
+
+  <div class="small" id="statusText"></div>
+</div>
+
+<script>
+const API_KEY = "4a34dacf20f9cf42c390ebc5138f2e94";
+
+const cityInput = document.getElementById("cityInput");
+const searchBtn = document.getElementById("searchBtn");
+const locBtn   = document.getElementById("locBtn");
+const output   = document.getElementById("weatherOutput");
+const statusText = document.getElementById("statusText");
+
+const cloudLayer = document.getElementById("cloudLayer");
+const rainLayer  = document.getElementById("rainLayer");
+const fogLayer   = document.getElementById("fogLayer");
+const sunGlow    = document.getElementById("sunGlow");
+const lightningLayer = document.getElementById("lightningLayer");
+
+let lightningInterval = null;
+
+function resetEffects(){
+  cloudLayer.style.opacity = 0;
+  rainLayer.style.opacity  = 0;
+  fogLayer.style.opacity   = 0;
+  sunGlow.style.opacity    = 0;
+  lightningLayer.style.opacity = 0;
+  if (lightningInterval){
+    clearInterval(lightningInterval);
+    lightningInterval = null;
+  }
+}
+
+function flashOnce(){
+  lightningLayer.style.opacity = 1;
+  setTimeout(()=>{lightningLayer.style.opacity=0;},120);
+}
+
+function applyVisuals(conditionMain){
+  const main = conditionMain.toLowerCase();
+  resetEffects();
+
+  if(main.includes("clear")) sunGlow.style.opacity = 1;
+  if(main.includes("cloud")) cloudLayer.style.opacity = 1;
+  if(main.includes("rain") || main.includes("drizzle")){
+    cloudLayer.style.opacity = 1;
+    rainLayer.style.opacity  = 1;
+    if(Math.random() > 0.6) flashOnce();
+  }
+  if(main.includes("thunder")){
+    cloudLayer.style.opacity = 1;
+    rainLayer.style.opacity  = 1;
+    lightningInterval = setInterval(flashOnce, 1400);
+  }
+  if(main.includes("fog") || main.includes("mist") || main.includes("haze") || main.includes("smoke")){
+    fogLayer.style.opacity = 1;
+  }
+}
+
+function renderWeather(data){
+  const temp = Math.round(data.main.temp);
+  const feels = Math.round(data.main.feels_like);
+  const desc = data.weather[0].description;
+  const main = data.weather[0].main;
+  const hum  = data.main.humidity;
+  const wind = data.wind.speed;
+
+  output.innerHTML = `
+    <div class="temp">${temp}°C</div>
+    <div class="desc">${desc}</div>
+    <div class="meta-grid">
+      <div><b>City:</b> ${data.name}</div>
+      <div><b>Condition:</b> ${main}</div>
+      <div><b>Feels like:</b> ${feels}°C</div>
+      <div><b>Humidity:</b> ${hum}%</div>
+      <div><b>Wind:</b> ${wind} m/s</div>
+    </div>
+  `;
+  statusText.textContent = "Last updated: " + new Date().toLocaleTimeString();
+  applyVisuals(main);
+}
+
+async function fetchWeatherByCity(city){
+  statusText.textContent = "Loading weather for " + city + "...";
+  const url =
+   `https://api.openweathermap.org/data/2.5/weather?q=${encodeURIComponent(city)}&appid=${API_KEY}&units=metric`;
+  const res = await fetch(url);
+  if(!res.ok) throw new Error("City not found");
+  return res.json();
+}
+
+async function fetchWeatherByCoords(lat, lon){
+  statusText.textContent = "Loading weather for your location...";
+  const url =
+   `https://api.openweathermap.org/data/2.5/weather?lat=${lat}&lon=${lon}&appid=${API_KEY}&units=metric`;
+  const res = await fetch(url);
+  if(!res.ok) throw new Error("Location weather error");
+  return res.json();
+}
+
+// IP-based approx location (fallback)
+async function fetchApproxLocationCity(){
+  statusText.textContent = "Trying approximate location (IP)...";
+  const res = await fetch("https://ipapi.co/json/");
+  const data = await res.json();
+  return data.city;
+}
+
+async function handleSearch(){
+  const city = cityInput.value.trim();
+  if(!city){ alert("Please enter a city name."); return; }
+  try{
+    const data = await fetchWeatherByCity(city);
+    renderWeather(data);
+  }catch(err){
+    console.error(err);
+    statusText.textContent = "Error: " + err.message;
+    output.textContent = "Unable to get weather. Check city name or internet.";
+    resetEffects();
+  }
+}
+
+function handleLocation(){
+  if(navigator.geolocation){
+    navigator.geolocation.getCurrentPosition(async(pos)=>{
+      const {latitude, longitude} = pos.coords;
+      try{
+        const data = await fetchWeatherByCoords(latitude, longitude);
+        renderWeather(data);
+      }catch(err){
+        console.error(err);
+        statusText.textContent = "Error: " + err.message;
+        output.textContent = "Unable to get GPS weather, trying approx city...";
+        resetEffects();
+        useApproxCity();
+      }
+    }, (err)=>{
+      console.warn("GPS blocked, using IP city", err);
+      useApproxCity();
+    });
+  } else {
+    useApproxCity();
+  }
+}
+
+async function useApproxCity(){
+  try{
+    const city = await fetchApproxLocationCity();
+    if(!city){
+      statusText.textContent = "Could not detect city from IP.";
+      output.textContent = "Please type your city above.";
+      return;
+    }
+    const data = await fetchWeatherByCity(city);
+    renderWeather(data);
+    statusText.textContent += " | Approx city: " + city;
+  }catch(err){
+    console.error(err);
+    statusText.textContent = "Could not get approximate location.";
+    output.textContent = "Please type your city manually.";
+    resetEffects();
+  }
+}
+
+searchBtn.addEventListener("click", handleSearch);
+locBtn.addEventListener("click", handleLocation);
+cityInput.addEventListener("keyup",(e)=>{ if(e.key === "Enter") handleSearch(); });
+</script>
+</body>
+</html>
